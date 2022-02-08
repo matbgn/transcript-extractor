@@ -1,0 +1,6 @@
+.idea
+venv
+model
+ffmpeg
+transcript.txt
+transcript_auto_corrected.txt
