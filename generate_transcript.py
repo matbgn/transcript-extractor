@@ -9,12 +9,11 @@ import subprocess
 import shutil
 import language_tool_python
 
-LANGUAGE = 'en-US'
+ARCHITECTURE = "linux"  # windows or linux or mac
 
-VOSK_MODEL_VERSION = "vosk-model-en-us-0.22-lgraph"
+LANGUAGE = 'en-US'  # fr OR en-US
+VOSK_MODEL_VERSION = "vosk-model-en-us-0.22-lgraph"  # vosk-model-fr-0.22 OR vosk-model-en-us-0.22-lgraph
 VOSK_REPO_URL = "https://alphacephei.com/vosk/models/"
-
-ARCHITECTURE = "win"  # win or linux
 
 # FFMPEG Windows sources
 FFMPEG_WIN_VERSION = "ffmpeg-5.0-essentials_build"
@@ -25,6 +24,11 @@ FFMPEG_WIN_REPO_URL = "https://www.gyan.dev/ffmpeg/builds/packages/"
 FFMPEG_LINUX_VERSION = "ffmpeg-5.0-amd64-static"
 FFMPEG_LINUX_EXTENSION = "tar.xz"
 FFMPEG_LINUX_REPO_URL = "https://johnvansickle.com/ffmpeg/releases/"
+
+# FFMPEG MacOS sources
+FFMPEG_MAC_VERSION = "ffmpeg-5.0"
+FFMPEG_MAC_EXTENSION = "zip"
+FFMPEG_MAC_REPO_URL = "https://evermeet.cx/ffmpeg/"
 
 
 def download_and_unpack_sources(repo_url, file_name, target_dir_name, extension="zip"):
@@ -48,14 +52,15 @@ def download_and_unpack_sources(repo_url, file_name, target_dir_name, extension=
 
     shutil.unpack_archive(f'{file_name}.{extension}')
 
-    os.rename(file_name, target_dir_name)
+    if target_dir_name:
+        os.rename(file_name, target_dir_name)
 
     os.remove(f'{file_name}.{extension}')
 
 
 def sample_video_as_wav(input_file, sample_rate):
     dirname = os.path.dirname(__file__)
-    ffmpeg_path = os.path.join(dirname, 'ffmpeg', 'bin', 'ffmpeg') if ARCHITECTURE == 'win' else os.path.join(dirname, 'ffmpeg', 'ffmpeg')
+    ffmpeg_path = os.path.join(dirname, 'ffmpeg', 'bin', 'ffmpeg') if ARCHITECTURE == 'windows' else os.path.join(dirname, 'ffmpeg', 'ffmpeg')
     return subprocess.Popen([ffmpeg_path, '-loglevel', 'quiet', '-i',
                              input_file,
                              '-ar', str(sample_rate), '-ac', '1', '-f', 's16le', '-'],
@@ -126,22 +131,28 @@ def transcript_file(input_file, model_path, is_audio=True):
     return transcription_text
 
 
-print("Downloading sources...")
+print(f'Downloading sources for {ARCHITECTURE.upper()}...')
 
 if not os.path.exists("ffmpeg"):
-    if ARCHITECTURE == "win":
+    if ARCHITECTURE == "windows":
         download_and_unpack_sources(FFMPEG_WIN_REPO_URL, FFMPEG_WIN_VERSION, "ffmpeg", FFMPEG_WIN_EXTENSION)
-    else:
+    elif ARCHITECTURE == "linux":
         download_and_unpack_sources(FFMPEG_LINUX_REPO_URL, FFMPEG_LINUX_VERSION, "ffmpeg", FFMPEG_LINUX_EXTENSION)
-if not os.path.exists("model"):
-    download_and_unpack_sources(VOSK_REPO_URL, VOSK_MODEL_VERSION, "model", extension="zip")
+    else:
+        download_and_unpack_sources(FFMPEG_MAC_REPO_URL, FFMPEG_MAC_VERSION, False, FFMPEG_MAC_EXTENSION)
+        os.rename("ffmpeg", "ffmpeg_tmp")
+        os.mkdir("ffmpeg")
+        shutil.move("ffmpeg_tmp", "ffmpeg" + os.sep + "ffmpeg")
+
+if not os.path.exists(f'model-{LANGUAGE}'):
+    download_and_unpack_sources(VOSK_REPO_URL, VOSK_MODEL_VERSION, f'model-{LANGUAGE}', extension="zip")
 
 if len(sys.argv) > 1 and sys.argv[1][-3:] == "wav":
-    transcription = transcript_file(sys.argv[1], "model", is_audio=True)
+    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', is_audio=True)
 elif len(sys.argv) > 1:
-    transcription = transcript_file(sys.argv[1], "model", is_audio=False)
+    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', is_audio=False)
 else:
-    transcription = transcript_file("test.wav", "model", is_audio=False)
+    transcription = transcript_file("test.wav", f'model-{LANGUAGE}', is_audio=False)
 
 with open("transcript.txt", "w+") as file:
     file.write(transcription)
