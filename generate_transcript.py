@@ -190,12 +190,9 @@ else:
     transcription = transcript_file("youtube_dl_input_mono.wav", f'model-{LANGUAGE}', ffmpeg_path=False, is_audio=True)
     os.remove("youtube_dl_input_mono.wav")
 
-with open("transcript.txt", "w+") as file:
-    file.write(transcription)
-
 print("Proceeding basic grammar check...")
 
-with open("transcript_auto_corrected.txt", "w+") as file:
+with open("transcript_with_auto_grammar_check.txt", "w+") as file:
     tool = language_tool_python.LanguageTool(LANGUAGE)
     matches = tool.check(transcription)
     transcription_corrected = tool.correct(transcription)
