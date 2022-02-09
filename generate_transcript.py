@@ -63,17 +63,16 @@ def download_and_unpack_sources(repo_url, file_name, target_dir_name, extension=
 
 
 def download_youtube_audio(youtube_url):
-    song_title = 'youtube_dl_input'
     ydl_opts = {
         'ffmpeg_location': FFMPEG_EXE_PATH,
-        'outtmpl': song_title + '.%(ext)s',
+        'outtmpl': 'youtube_dl_input' + '.%(ext)s',
         'format': 'bestaudio/best',
         'restrictfilenames': True,
         'noplaylist': True,
         'postprocessors': [
             {'key': 'FFmpegExtractAudio',
              'preferredcodec': 'wav',
-             'preferredquality': '192',
+             'preferredquality': '128',
              },
         ],
     }
@@ -82,7 +81,7 @@ def download_youtube_audio(youtube_url):
 
     subprocess.call([FFMPEG_EXE_PATH, '-loglevel', 'quiet', '-i',
                      'youtube_dl_input.wav',
-                     '-ac', '1',
+                     '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le',
                      'youtube_dl_input_mono.wav'])
 
     os.remove('youtube_dl_input.wav')
