@@ -1,13 +1,14 @@
-from vosk import Model, KaldiRecognizer, SetLogLevel
+import language_tool_python
+import requests
 from tqdm import tqdm
+from vosk import Model, KaldiRecognizer
+from yt_dlp import YoutubeDL
 import wave
 import sys
 import os
-import requests
 import json
 import subprocess
 import shutil
-import language_tool_python
 
 ARCHITECTURE = "linux"  # windows or linux or mac
 
@@ -58,16 +59,40 @@ def download_and_unpack_sources(repo_url, file_name, target_dir_name, extension=
     os.remove(f'{file_name}.{extension}')
 
 
-def sample_video_as_wav(input_file, sample_rate):
-    dirname = os.path.dirname(__file__)
-    ffmpeg_path = os.path.join(dirname, 'ffmpeg', 'bin', 'ffmpeg') if ARCHITECTURE == 'windows' else os.path.join(dirname, 'ffmpeg', 'ffmpeg')
-    return subprocess.Popen([ffmpeg_path, '-loglevel', 'quiet', '-i',
+def download_youtube_audio(youtube_url, ffmpeg_path, sample_rate):
+    song_title = 'youtube_dl_input'
+    ydl_opts = {
+        'ffmpeg_location': f'{ffmpeg_path}',
+        'outtmpl': song_title + '.%(ext)s',
+        'format': 'bestaudio/best',
+        'restrictfilenames': True,
+        'noplaylist': True,
+        'postprocessors': [
+            {'key': 'FFmpegExtractAudio',
+             'preferredcodec': 'wav',
+             'preferredquality': '192',
+             },
+        ],
+    }
+    with YoutubeDL(ydl_opts) as ydl:
+        ydl.download([youtube_url])
+
+    subprocess.call([ffmpeg_path, '-loglevel', 'quiet', '-i',
+                     'youtube_dl_input.wav',
+                     '-ac', '1',
+                     'youtube_dl_input_mono.wav'])
+
+    os.remove('youtube_dl_input.wav')
+
+
+def sample_video_as_wav(input_file, sample_rate, ffmpeg):
+    return subprocess.Popen([ffmpeg, '-loglevel', 'quiet', '-i',
                              input_file,
                              '-ar', str(sample_rate), '-ac', '1', '-f', 's16le', '-'],
                             stdout=subprocess.PIPE)
 
 
-def transcript_file(input_file, model_path, is_audio=True):
+def transcript_file(input_file, model_path, ffmpeg_path=False, is_audio=True):
     # Check if file exists
     if not os.path.isfile(input_file):
         raise FileNotFoundError(os.path.basename(input_file) + " not found")
@@ -97,9 +122,9 @@ def transcript_file(input_file, model_path, is_audio=True):
     if is_audio:
         file_size = os.path.getsize(input_file)
     else:
-        file_size = len(sample_video_as_wav(input_file, sample_rate).stdout.read())
+        file_size = len(sample_video_as_wav(input_file, sample_rate, ffmpeg_path).stdout.read())
         # Reinit process stdout to the beginning because seek is not possible with stdio
-        process = sample_video_as_wav(input_file, sample_rate)
+        process = sample_video_as_wav(input_file, sample_rate, ffmpeg_path)
 
     # Run transcription
     pbar = tqdm(total=file_size)
@@ -131,7 +156,7 @@ def transcript_file(input_file, model_path, is_audio=True):
     return transcription_text
 
 
-print(f'Downloading sources for {ARCHITECTURE.upper()}...')
+print(f'Downloading sources for {ARCHITECTURE.upper()}, language {LANGUAGE.upper()}...')
 
 if not os.path.exists("ffmpeg"):
     if ARCHITECTURE == "windows":
@@ -144,15 +169,26 @@ if not os.path.exists("ffmpeg"):
         os.mkdir("ffmpeg")
         shutil.move("ffmpeg_tmp", "ffmpeg" + os.sep + "ffmpeg")
 
+dirname = os.path.dirname(__file__)
+ffmpeg_path = os.path.join(dirname, 'ffmpeg', 'bin', 'ffmpeg') if ARCHITECTURE == 'windows' else os.path.join(dirname, 'ffmpeg', 'ffmpeg')
+
 if not os.path.exists(f'model-{LANGUAGE}'):
     download_and_unpack_sources(VOSK_REPO_URL, VOSK_MODEL_VERSION, f'model-{LANGUAGE}', extension="zip")
 
-if len(sys.argv) > 1 and sys.argv[1][-3:] == "wav":
-    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', is_audio=True)
+if len(sys.argv) > 1 and sys.argv[1][:4] == "http":
+    download_youtube_audio(sys.argv[1], ffmpeg_path, 16000)
+    transcription = transcript_file("youtube_dl_input_mono.wav", f'model-{LANGUAGE}', ffmpeg_path=False, is_audio=True)
+    os.remove("youtube_dl_input_mono.wav")
+
+elif len(sys.argv) > 1 and sys.argv[1][-3:] == "wav":
+    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', ffmpeg_path=False, is_audio=True)
 elif len(sys.argv) > 1:
-    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', is_audio=False)
+    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', ffmpeg_path, is_audio=False)
 else:
-    transcription = transcript_file("test.wav", f'model-{LANGUAGE}', is_audio=False)
+    # Test purpose content
+    download_youtube_audio('https://www.youtube.com/watch?v=BaW_jenozKc', ffmpeg_path, 16000)
+    transcription = transcript_file("youtube_dl_input_mono.wav", f'model-{LANGUAGE}', ffmpeg_path=False, is_audio=True)
+    os.remove("youtube_dl_input_mono.wav")
 
 with open("transcript.txt", "w+") as file:
     file.write(transcription)
