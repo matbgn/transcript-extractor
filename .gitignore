@@ -2,5 +2,5 @@
 venv
 model*
 ffmpeg
-transcript.txt
-transcript_auto_corrected.txt
+transcript*.txt
+youtube_dl*

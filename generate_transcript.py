@@ -31,6 +31,9 @@ FFMPEG_MAC_VERSION = "ffmpeg-5.0"
 FFMPEG_MAC_EXTENSION = "zip"
 FFMPEG_MAC_REPO_URL = "https://evermeet.cx/ffmpeg/"
 
+FFMPEG_EXE_PATH = os.path.join(os.path.dirname(__file__), 'ffmpeg', 'bin', 'ffmpeg') if ARCHITECTURE == 'windows' \
+    else os.path.join(os.path.dirname(__file__), 'ffmpeg', 'ffmpeg')
+
 
 def download_and_unpack_sources(repo_url, file_name, target_dir_name, extension="zip"):
 
@@ -59,10 +62,10 @@ def download_and_unpack_sources(repo_url, file_name, target_dir_name, extension=
     os.remove(f'{file_name}.{extension}')
 
 
-def download_youtube_audio(youtube_url, ffmpeg_path, sample_rate):
+def download_youtube_audio(youtube_url):
     song_title = 'youtube_dl_input'
     ydl_opts = {
-        'ffmpeg_location': f'{ffmpeg_path}',
+        'ffmpeg_location': FFMPEG_EXE_PATH,
         'outtmpl': song_title + '.%(ext)s',
         'format': 'bestaudio/best',
         'restrictfilenames': True,
@@ -77,7 +80,7 @@ def download_youtube_audio(youtube_url, ffmpeg_path, sample_rate):
     with YoutubeDL(ydl_opts) as ydl:
         ydl.download([youtube_url])
 
-    subprocess.call([ffmpeg_path, '-loglevel', 'quiet', '-i',
+    subprocess.call([FFMPEG_EXE_PATH, '-loglevel', 'quiet', '-i',
                      'youtube_dl_input.wav',
                      '-ac', '1',
                      'youtube_dl_input_mono.wav'])
@@ -85,14 +88,14 @@ def download_youtube_audio(youtube_url, ffmpeg_path, sample_rate):
     os.remove('youtube_dl_input.wav')
 
 
-def sample_video_as_wav(input_file, sample_rate, ffmpeg):
-    return subprocess.Popen([ffmpeg, '-loglevel', 'quiet', '-i',
+def sample_video_as_wav(input_file, sample_rate):
+    return subprocess.Popen([FFMPEG_EXE_PATH, '-loglevel', 'quiet', '-i',
                              input_file,
                              '-ar', str(sample_rate), '-ac', '1', '-f', 's16le', '-'],
                             stdout=subprocess.PIPE)
 
 
-def transcript_file(input_file, model_path, ffmpeg_path=False, is_audio=True):
+def transcript_file(input_file, model_path, is_audio=True):
     # Check if file exists
     if not os.path.isfile(input_file):
         raise FileNotFoundError(os.path.basename(input_file) + " not found")
@@ -122,9 +125,9 @@ def transcript_file(input_file, model_path, ffmpeg_path=False, is_audio=True):
     if is_audio:
         file_size = os.path.getsize(input_file)
     else:
-        file_size = len(sample_video_as_wav(input_file, sample_rate, ffmpeg_path).stdout.read())
+        file_size = len(sample_video_as_wav(input_file, sample_rate).stdout.read())
         # Reinit process stdout to the beginning because seek is not possible with stdio
-        process = sample_video_as_wav(input_file, sample_rate, ffmpeg_path)
+        process = sample_video_as_wav(input_file, sample_rate)
 
     # Run transcription
     pbar = tqdm(total=file_size)
@@ -169,25 +172,23 @@ if not os.path.exists("ffmpeg"):
         os.mkdir("ffmpeg")
         shutil.move("ffmpeg_tmp", "ffmpeg" + os.sep + "ffmpeg")
 
-dirname = os.path.dirname(__file__)
-ffmpeg_path = os.path.join(dirname, 'ffmpeg', 'bin', 'ffmpeg') if ARCHITECTURE == 'windows' else os.path.join(dirname, 'ffmpeg', 'ffmpeg')
 
 if not os.path.exists(f'model-{LANGUAGE}'):
     download_and_unpack_sources(VOSK_REPO_URL, VOSK_MODEL_VERSION, f'model-{LANGUAGE}', extension="zip")
 
 if len(sys.argv) > 1 and sys.argv[1][:4] == "http":
-    download_youtube_audio(sys.argv[1], ffmpeg_path, 16000)
-    transcription = transcript_file("youtube_dl_input_mono.wav", f'model-{LANGUAGE}', ffmpeg_path=False, is_audio=True)
+    download_youtube_audio(sys.argv[1])
+    transcription = transcript_file("youtube_dl_input_mono.wav", f'model-{LANGUAGE}', is_audio=True)
     os.remove("youtube_dl_input_mono.wav")
 
 elif len(sys.argv) > 1 and sys.argv[1][-3:] == "wav":
-    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', ffmpeg_path=False, is_audio=True)
+    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', is_audio=True)
 elif len(sys.argv) > 1:
-    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', ffmpeg_path, is_audio=False)
+    transcription = transcript_file(sys.argv[1], f'model-{LANGUAGE}', is_audio=False)
 else:
     # Test purpose content
-    download_youtube_audio('https://www.youtube.com/watch?v=BaW_jenozKc', ffmpeg_path, 16000)
-    transcription = transcript_file("youtube_dl_input_mono.wav", f'model-{LANGUAGE}', ffmpeg_path=False, is_audio=True)
+    download_youtube_audio('https://youtu.be/hORwj7g_GFE')
+    transcription = transcript_file("youtube_dl_input_mono.wav", f'model-{LANGUAGE}', is_audio=True)
     os.remove("youtube_dl_input_mono.wav")
 
 print("Proceeding basic grammar check...")
