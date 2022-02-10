@@ -3,3 +3,4 @@ requests==2.27.1
 tqdm==4.62.3
 vosk==0.3.32
 yt-dlp==2022.2.4
+fpdf~=1.7.2

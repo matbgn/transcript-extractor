@@ -3,6 +3,7 @@ import requests
 from tqdm import tqdm
 from vosk import Model, KaldiRecognizer
 from yt_dlp import YoutubeDL
+from fpdf import FPDF
 import wave
 import sys
 import os
@@ -192,9 +193,23 @@ else:
 
 print("Proceeding basic grammar check...")
 
-with open("transcript_with_auto_grammar_check.txt", "w+") as file:
-    tool = language_tool_python.LanguageTool(LANGUAGE)
-    matches = tool.check(transcription)
-    transcription_corrected = tool.correct(transcription)
-    file.write(transcription_corrected)
-    tool.close()
+tool = language_tool_python.LanguageTool(LANGUAGE)
+matches = tool.check(transcription)
+transcription_corrected = tool.correct(transcription)
+
+tool.close()
+
+pdf = FPDF()
+
+pdf.add_page()
+
+margin_bottom_mm = 10
+pdf.set_auto_page_break(True, margin=margin_bottom_mm)
+pdf.set_font("Times", size=12)
+
+words = transcription_corrected.split()
+grouped_words = [' '.join(words[i: i + 13]) for i in range(0, len(words), 13)]
+for x in grouped_words:
+    pdf.cell(50, 10, txt=x, ln=1, align='L')
+
+pdf.output("transcript.pdf")
